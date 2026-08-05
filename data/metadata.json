@@ -1,0 +1,11 @@
+{
+  "updated_at": "2026-08-05 10:57:09 AWST",
+  "labour_reference_period": "June 2026",
+  "cpi_reference_period": "June 2026",
+  "dwelling_reference_period": "June 2026",
+  "sources": {
+    "labour": "https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/latest-release",
+    "cpi": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release",
+    "dwelling": "https://www.abs.gov.au/statistics/industry/building-and-construction/building-approvals-australia/latest-release"
+  }
+}
