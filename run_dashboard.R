@@ -1,0 +1,6 @@
+source("R/update_data.R")
+quarto <- Sys.which("quarto")
+if (!nzchar(quarto)) stop("Quarto was not found. Install Quarto, restart RStudio, then try again.")
+status <- system2(quarto, "render")
+if (status != 0) stop("Quarto render failed")
+message("Dashboard built. Open _site/index.html")

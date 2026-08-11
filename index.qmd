@@ -1,0 +1,94 @@
+---
+title: ""
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(glue)
+library(htmltools)
+library(jsonlite)
+
+summary_data <- read_csv("data/dashboard_summary.csv", show_col_types=FALSE)
+labour <- read_csv("data/labour_market.csv", show_col_types=FALSE)
+cpi <- read_csv("data/cpi_capital_cities.csv", show_col_types=FALSE)
+dwellings <- read_csv("data/dwelling_approvals.csv", show_col_types=FALSE)
+fuel_monthly <- read_csv("data/fuel_monthly.csv", show_col_types=FALSE)
+metadata <- fromJSON("data/metadata.json")
+
+parse_values <- function(x) {
+  if (is.na(x) || !nzchar(x)) return(numeric())
+  y <- as.numeric(strsplit(x,"\\|")[[1]])
+  y[is.finite(y)]
+}
+
+spark_svg <- function(values, colour, width=150, height=46) {
+  if (length(values)<2) return('<span class="no-trend">Daily price only</span>')
+  x <- seq(4,width-4,length.out=length(values)); rng <- range(values,na.rm=TRUE)
+  y <- if (diff(rng)==0) rep(height/2,length(values)) else 4+(max(values)-values)/diff(rng)*(height-8)
+  points <- paste(sprintf("%.1f,%.1f",x,y),collapse=" ")
+  last_x <- sprintf("%.1f", tail(x, 1))
+  last_y <- sprintf("%.1f", tail(y, 1))
+  glue('<svg class="sparkline" viewBox="0 0 {width} {height}" role="img" aria-label="Recent trend"><polyline points="{points}" fill="none" stroke="{colour}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="{last_x}" cy="{last_y}" r="4" fill="white" stroke="{colour}" stroke-width="3"/></svg>')
+}
+status_class <- function(x) paste0("cell-",x)
+
+dashboard_row <- function(indicator,group,latest_display,month_display,year_display,base_display,latest_status,month_status,year_status,base_status,spark_values,spark_colour,note,fuel_row) {
+  fuel_class <- if (isTRUE(as.logical(fuel_row))) " fuel-row" else ""
+  glue('<div class="summary-row{fuel_class}"><div class="indicator-cell"><span class="section-kicker">{htmlEscape(group)}</span><strong>{htmlEscape(indicator)}</strong><small>{htmlEscape(note)}</small></div><div class="trend-cell">{spark_svg(parse_values(spark_values),spark_colour)}</div><div class="metric-cell latest-cell {status_class(latest_status)}">{htmlEscape(latest_display)}</div><div class="metric-cell {status_class(month_status)}">{htmlEscape(month_display)}</div><div class="metric-cell {status_class(year_status)}">{htmlEscape(year_display)}</div><div class="metric-cell {status_class(base_status)}">{htmlEscape(base_display)}</div></div>')
+}
+rows <- pmap_chr(summary_data,dashboard_row)
+
+make_table <- function(data, highlight_name=NULL, highlight_row=NULL, min_width=980) {
+  headers <- paste0("<th>",htmlEscape(names(data)),"</th>",collapse="")
+  body <- map_chr(seq_len(nrow(data)),function(i){
+    cells <- map_chr(seq_along(data),function(j){
+      classes <- character(); if(j==1) classes <- c(classes,"row-label")
+      if(!is.null(highlight_name) && names(data)[j]==highlight_name) classes <- c(classes,"highlight-column")
+      if(!is.null(highlight_row) && i==highlight_row) classes <- c(classes,"highlight-row")
+      cls <- if(length(classes)) paste0(' class="',paste(classes,collapse=" "),'"') else ""
+      glue('<td{cls}>{htmlEscape(as.character(data[[j]][i]))}</td>')
+    }); glue('<tr>{paste(cells,collapse="")}</tr>')
+  })
+  glue('<div class="table-wrap"><table class="data-table" style="min-width:{min_width}px"><thead><tr>{headers}</tr></thead><tbody>{paste(body,collapse="")}</tbody></table></div>')
+}
+
+fuel_rows <- summary_data |> filter(group=="Fuel")
+```
+
+```{r}
+#| results: asis
+cat(glue('<div class="dashboard-shell"><div class="dashboard-top"><div class="dashboard-title"><span class="eyebrow">Economic dashboard</span><h1>WA economic indicators</h1><p class="dashboard-lead">A compact view of Western Australia’s labour market, inflation, residential construction and Perth fuel prices.</p></div><div class="snapshot">Updated {htmlEscape(metadata$updated_at)}</div></div><section class="card summary-scroll"><div class="summary-header"><div></div><div>Recent trend<small>Up to 3 years</small></div><div>Latest figure<small>Latest available</small></div><div>One month change<small>Previous month</small></div><div>One year change<small>Annual/year-earlier</small></div><div>Change since COVID-19<small>Where comparable</small></div></div>{paste(rows,collapse="")}</section><p class="method-note"><strong>Fuel rows:</strong> only the lowest price shown on the WA Fuel Finder Perth pages is displayed; no trend or change calculations are applied. <strong>CPI short-term trend:</strong> {htmlEscape(metadata$cpi_trend_definition)}</p></div>'))
+```
+
+```{r}
+#| results: asis
+ulp <- fuel_rows |> filter(grepl("ULP",indicator)) |> slice(1)
+dsl <- fuel_rows |> filter(grepl("diesel",indicator,ignore.case=TRUE)) |> slice(1)
+fuel_tbl <- fuel_monthly |>
+  mutate(
+    sort_date = as.Date(date),
+    Month = ifelse(!is.na(month), month, format(sort_date, "%B %Y")),
+    `Metro ULP average (cpl)` = ulp_cpl,
+    `Metro diesel average (cpl)` = diesel_cpl
+  ) |>
+  arrange(desc(sort_date)) |>
+  select(Month, `Metro ULP average (cpl)`, `Metro diesel average (cpl)`)
+cat(glue('<section class="section-card"><details open><summary><div class="summary-title"><div class="icon fuel">F</div><div><h2>Monthly average fuel prices</h2><p>FuelWatch Metro averages, cents per litre</p></div></div><div class="chevron">⌄</div></summary><div class="detail-body"><div class="fuel-grid"><div class="fuel-card"><span>Lowest listed ULP — Perth</span><strong>{htmlEscape(ulp$latest_display)}</strong><small>{htmlEscape(ulp$note)}</small></div><div class="fuel-card"><span>Lowest listed diesel — Perth</span><strong>{htmlEscape(dsl$latest_display)}</strong><small>{htmlEscape(dsl$note)}</small></div></div><div class="detail-toolbar"><p>Monthly averages come from FuelWatch. {htmlEscape(metadata$fuel_monthly_mode)}</p><a class="source-button" href="https://www.fuelwatch.wa.gov.au/retail/monthly" target="_blank">Open FuelWatch</a></div>{make_table(fuel_tbl,min_width=680)}<p class="section-note">Blank monthly cells mean that series has not yet been refreshed by the optional monthly connector.</p></div></details></section>'))
+```
+
+```{r}
+#| results: asis
+cat(glue('<section class="section-card"><details><summary><div class="summary-title"><div class="icon">L</div><div><h2>Labour market details</h2><p>{htmlEscape(metadata$labour_reference_period)} · seasonally adjusted</p></div></div><div class="chevron">⌄</div></summary><div class="detail-body">{make_table(labour,highlight_name="Western Australia",highlight_row=which(labour[[1]]=="Unemployment rate"))}</div></details></section>'))
+```
+
+```{r}
+#| results: asis
+cat(glue('<section class="section-card"><details><summary><div class="summary-title"><div class="icon">C</div><div><h2>CPI details</h2><p>{htmlEscape(metadata$cpi_reference_period)} · annual percentage change by capital city</p></div></div><div class="chevron">⌄</div></summary><div class="detail-body">{make_table(cpi,highlight_name="Perth",highlight_row=which(cpi[[1]]=="All groups"),min_width=1080)}</div></details></section>'))
+```
+
+```{r}
+#| results: asis
+cat(glue('<section class="section-card"><details><summary><div class="summary-title"><div class="icon">D</div><div><h2>Dwelling approvals details</h2><p>{htmlEscape(metadata$dwelling_reference_period)} · seasonally adjusted</p></div></div><div class="chevron">⌄</div></summary><div class="detail-body">{make_table(dwellings,highlight_row=which(dwellings[[1]]=="Western Australia"))}</div></details></section>'))
+```

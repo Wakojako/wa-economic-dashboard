@@ -1,0 +1,17 @@
+{
+  "updated_at": "2026-08-11 16:04:25 AWST",
+  "labour_reference_period": "June 2026",
+  "cpi_reference_period": "June 2026",
+  "dwelling_reference_period": "June 2026",
+  "daily_fuel_reference_period": "Tue, 11 Aug 2026 6AM",
+  "fuel_monthly_mode": "cached monthly values (PARSE_API_KEY not configured)",
+  "cpi_trend_definition": "Six-month annualised change in the seasonally adjusted Australian All Groups CPI index. Dashboard calculation.",
+  "sources": {
+    "labour": "https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/latest-release",
+    "cpi": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release",
+    "dwelling": "https://www.abs.gov.au/statistics/industry/building-and-construction/building-approvals-australia/latest-release",
+    "ulp": "https://wafuelfinder.com/ulp/Perth/today",
+    "diesel": "https://wafuelfinder.com/diesel/Perth/today",
+    "fuelwatch_monthly": "https://www.fuelwatch.wa.gov.au/retail/monthly"
+  }
+}

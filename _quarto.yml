@@ -1,0 +1,22 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "WA Economic Indicators"
+  page-footer:
+    left: "Sources: ABS, FuelWatch and WA Fuel Finder"
+    right: "Dashboard"
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: false
+    page-layout: full
+    embed-resources: true
+
+execute:
+  echo: false
+  warning: false
+  message: false
