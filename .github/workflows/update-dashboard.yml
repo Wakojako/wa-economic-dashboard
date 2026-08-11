@@ -155,12 +155,8 @@ jobs:
 
       - name: Send daily dashboard email
         env:
-          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
-          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
-
-          # Automatically takes the URL from the successful
-          # GitHub Pages deployment above
           DASHBOARD_URL: ${{ needs.deploy.outputs.page_url }}
 
         run: python scripts/send_daily_email.py
