@@ -42,6 +42,8 @@ jobs:
             any::jsonlite
             any::htmltools
             any::httr2
+            any::knitr
+            any::rmarkdown
       - name: Refresh dashboard data
         run: Rscript R/update_data.R
       - name: Render dashboard
