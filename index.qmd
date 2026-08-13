@@ -39,7 +39,6 @@ fuel_monthly <- read_csv(
   show_col_types = FALSE
 )
 
-# Load RBA cash-rate decisions if available
 cash_rate_decisions <- if (
   file.exists("data/cash_rate_decisions.csv")
 ) {
@@ -51,7 +50,9 @@ cash_rate_decisions <- if (
   tibble()
 }
 
-metadata <- fromJSON("data/metadata.json")
+metadata <- fromJSON(
+  "data/metadata.json"
+)
 
 
 # ============================================================
@@ -65,7 +66,10 @@ parse_values <- function(x) {
   }
 
   y <- as.numeric(
-    strsplit(x, "\\|")[[1]]
+    strsplit(
+      x,
+      "\\|"
+    )[[1]]
   )
 
   y[is.finite(y)]
@@ -80,9 +84,11 @@ spark_svg <- function(
 ) {
 
   if (length(values) < 2) {
+
     return(
-      '<span class="no-trend">No trend available</span>'
+      '<span class="no-trend">Daily price only</span>'
     )
+
   }
 
   x <- seq(
@@ -113,7 +119,11 @@ spark_svg <- function(
   }
 
   points <- paste(
-    sprintf("%.1f,%.1f", x, y),
+    sprintf(
+      "%.1f,%.1f",
+      x,
+      y
+    ),
     collapse = " "
   )
 
@@ -153,15 +163,19 @@ spark_svg <- function(
 
     </svg>'
   )
+
 }
 
 
 # ============================================================
-# DASHBOARD SUMMARY ROWS
+# MAIN DASHBOARD ROWS
 # ============================================================
 
 status_class <- function(x) {
-  paste0("cell-", x)
+  paste0(
+    "cell-",
+    x
+  )
 }
 
 
@@ -183,7 +197,9 @@ dashboard_row <- function(
 ) {
 
   fuel_class <- if (
-    isTRUE(as.logical(fuel_row))
+    isTRUE(
+      as.logical(fuel_row)
+    )
   ) {
     " fuel-row"
   } else {
@@ -247,6 +263,7 @@ dashboard_row <- function(
 
     </div>'
   )
+
 }
 
 
@@ -285,30 +302,36 @@ make_table <- function(
           classes <- character()
 
           if (j == 1) {
+
             classes <- c(
               classes,
               "row-label"
             )
+
           }
 
           if (
             !is.null(highlight_name) &&
             names(data)[j] == highlight_name
           ) {
+
             classes <- c(
               classes,
               "highlight-column"
             )
+
           }
 
           if (
             !is.null(highlight_row) &&
             i == highlight_row
           ) {
+
             classes <- c(
               classes,
               "highlight-row"
             )
+
           }
 
           cls <- if (length(classes)) {
@@ -378,27 +401,31 @@ make_table <- function(
 
     </div>'
   )
+
 }
 
 
 # ============================================================
-# FUEL DATA
+# FUEL ROWS
 # ============================================================
 
 fuel_rows <- summary_data |>
-  filter(group == "Fuel")
+  filter(
+    group == "Fuel"
+  )
 
 
 # ============================================================
-# CASH-RATE DECISION TABLE
+# RBA CASH-RATE DECISION TABLE
 # ============================================================
+
+cash_year <- format(
+  Sys.Date(),
+  "%Y"
+)
+
 
 if (nrow(cash_rate_decisions) > 0) {
-
-  current_year <- format(
-    Sys.Date(),
-    "%Y"
-  )
 
   cash_tbl <- cash_rate_decisions |>
 
@@ -411,7 +438,7 @@ if (nrow(cash_rate_decisions) > 0) {
       format(
         effective_date,
         "%Y"
-      ) == current_year
+      ) == cash_year
     ) |>
 
     arrange(
@@ -430,19 +457,25 @@ if (nrow(cash_rate_decisions) > 0) {
         decision,
 
       `Change (ppt)` =
-        ifelse(
-          change_ppt > 0,
-          paste0(
-            "+",
+        case_when(
+
+          is.na(change_ppt) ~ "—",
+
+          change_ppt > 0 ~
+            paste0(
+              "+",
+              sprintf(
+                "%.2f",
+                change_ppt
+              )
+            ),
+
+          TRUE ~
             sprintf(
               "%.2f",
               change_ppt
             )
-          ),
-          sprintf(
-            "%.2f",
-            change_ppt
-          )
+
         ),
 
       `Cash rate target` =
@@ -468,3 +501,570 @@ if (nrow(cash_rate_decisions) > 0) {
   cash_tbl <- tibble()
 
 }
+```
+
+```{r}
+#| results: asis
+
+# ============================================================
+# MAIN DASHBOARD
+# ============================================================
+
+cat(
+  glue(
+    '<div class="dashboard-shell">
+
+      <div class="dashboard-top">
+
+        <div class="dashboard-title">
+
+          <span class="eyebrow">
+            Economic dashboard
+          </span>
+
+          <h1>
+            WA economic indicators
+          </h1>
+
+          <p class="dashboard-lead">
+            A compact view of Western Australia’s
+            labour market, inflation, monetary policy,
+            residential construction and Perth fuel prices.
+          </p>
+
+        </div>
+
+        <div class="snapshot">
+          Updated {htmlEscape(metadata$updated_at)}
+        </div>
+
+      </div>
+
+
+      <section class="card summary-scroll">
+
+        <div class="summary-header">
+
+          <div></div>
+
+          <div>
+            Recent trend
+            <small>Up to 3 years</small>
+          </div>
+
+          <div>
+            Latest figure
+            <small>Latest available</small>
+          </div>
+
+          <div>
+            One month change
+            <small>Previous month</small>
+          </div>
+
+          <div>
+            One year change
+            <small>Annual/year-earlier</small>
+          </div>
+
+          <div>
+            Change since COVID-19
+            <small>Where comparable</small>
+          </div>
+
+        </div>
+
+        {paste(
+          rows,
+          collapse = ""
+        )}
+
+      </section>
+
+
+      <p class="method-note">
+
+        <strong>Cash rate:</strong>
+        Reserve Bank of Australia cash rate target.
+
+        <strong>Fuel rows:</strong>
+        only the lowest price shown on the
+        WA Fuel Finder Perth pages is displayed;
+        no trend or change calculations are applied.
+
+        <strong>CPI short-term trend:</strong>
+        {htmlEscape(metadata$cpi_trend_definition)}
+
+      </p>
+
+    </div>'
+  )
+)
+```
+
+```{r}
+#| results: asis
+
+# ============================================================
+# RBA CASH RATE DECISIONS
+# ============================================================
+
+cash_table_html <- if (
+  nrow(cash_tbl) > 0
+) {
+
+  make_table(
+    cash_tbl,
+    min_width = 620
+  )
+
+} else {
+
+  '<p class="section-note">
+     Cash-rate decision history will appear after
+     the RBA data has been successfully refreshed.
+   </p>'
+
+}
+
+
+cat(
+  glue(
+    '<section class="section-card">
+
+      <details open>
+
+        <summary>
+
+          <div class="summary-title">
+
+            <div class="icon">
+              R
+            </div>
+
+            <div>
+
+              <h2>
+                RBA cash rate decisions — {cash_year}
+              </h2>
+
+              <p>
+                Monetary Policy Board decisions
+                and cash rate target
+              </p>
+
+            </div>
+
+          </div>
+
+          <div class="chevron">
+            ⌄
+          </div>
+
+        </summary>
+
+
+        <div class="detail-body">
+
+          <div class="detail-toolbar">
+
+            <p>
+              Cash-rate decisions for the
+              current calendar year.
+            </p>
+
+            <a
+              class="source-button"
+              href="https://www.rba.gov.au/statistics/cash-rate/"
+              target="_blank"
+            >
+              Open RBA
+            </a>
+
+          </div>
+
+          {cash_table_html}
+
+          <p class="section-note">
+            Changes are measured in percentage points.
+            Dates shown are the effective dates
+            published by the Reserve Bank of Australia.
+          </p>
+
+        </div>
+
+      </details>
+
+    </section>'
+  )
+)
+```
+
+```{r}
+#| results: asis
+
+# ============================================================
+# MONTHLY FUEL
+# ============================================================
+
+ulp <- fuel_rows |>
+  filter(
+    grepl(
+      "ULP",
+      indicator
+    )
+  ) |>
+  slice(1)
+
+
+dsl <- fuel_rows |>
+  filter(
+    grepl(
+      "diesel",
+      indicator,
+      ignore.case = TRUE
+    )
+  ) |>
+  slice(1)
+
+
+fuel_tbl <- fuel_monthly |>
+
+  mutate(
+
+    sort_date =
+      as.Date(date),
+
+    Month =
+      ifelse(
+        !is.na(month),
+        month,
+        format(
+          sort_date,
+          "%B %Y"
+        )
+      ),
+
+    `Metro ULP average (cpl)` =
+      ulp_cpl,
+
+    `Metro diesel average (cpl)` =
+      diesel_cpl
+
+  ) |>
+
+  arrange(
+    desc(sort_date)
+  ) |>
+
+  select(
+    Month,
+    `Metro ULP average (cpl)`,
+    `Metro diesel average (cpl)`
+  )
+
+
+cat(
+  glue(
+    '<section class="section-card">
+
+      <details open>
+
+        <summary>
+
+          <div class="summary-title">
+
+            <div class="icon fuel">
+              F
+            </div>
+
+            <div>
+
+              <h2>
+                Monthly average fuel prices
+              </h2>
+
+              <p>
+                FuelWatch Metro averages,
+                cents per litre
+              </p>
+
+            </div>
+
+          </div>
+
+          <div class="chevron">
+            ⌄
+          </div>
+
+        </summary>
+
+
+        <div class="detail-body">
+
+          <div class="fuel-grid">
+
+            <div class="fuel-card">
+
+              <span>
+                Lowest listed ULP — Perth
+              </span>
+
+              <strong>
+                {htmlEscape(ulp$latest_display)}
+              </strong>
+
+              <small>
+                {htmlEscape(ulp$note)}
+              </small>
+
+            </div>
+
+
+            <div class="fuel-card">
+
+              <span>
+                Lowest listed diesel — Perth
+              </span>
+
+              <strong>
+                {htmlEscape(dsl$latest_display)}
+              </strong>
+
+              <small>
+                {htmlEscape(dsl$note)}
+              </small>
+
+            </div>
+
+          </div>
+
+
+          <div class="detail-toolbar">
+
+            <p>
+              Monthly averages come from FuelWatch.
+              {htmlEscape(metadata$fuel_monthly_mode)}
+            </p>
+
+            <a
+              class="source-button"
+              href="https://www.fuelwatch.wa.gov.au/retail/monthly"
+              target="_blank"
+            >
+              Open FuelWatch
+            </a>
+
+          </div>
+
+          {make_table(
+            fuel_tbl,
+            min_width = 680
+          )}
+
+          <p class="section-note">
+            Blank monthly cells mean that series has
+            not yet been refreshed by the optional
+            monthly connector.
+          </p>
+
+        </div>
+
+      </details>
+
+    </section>'
+  )
+)
+```
+
+```{r}
+#| results: asis
+
+# ============================================================
+# LABOUR MARKET DETAILS
+# ============================================================
+
+cat(
+  glue(
+    '<section class="section-card">
+
+      <details>
+
+        <summary>
+
+          <div class="summary-title">
+
+            <div class="icon">
+              L
+            </div>
+
+            <div>
+
+              <h2>
+                Labour market details
+              </h2>
+
+              <p>
+                {htmlEscape(metadata$labour_reference_period)}
+                · seasonally adjusted
+              </p>
+
+            </div>
+
+          </div>
+
+          <div class="chevron">
+            ⌄
+          </div>
+
+        </summary>
+
+
+        <div class="detail-body">
+
+          {make_table(
+            labour,
+            highlight_name = "Western Australia",
+            highlight_row =
+              which(
+                labour[[1]] ==
+                  "Unemployment rate"
+              )
+          )}
+
+        </div>
+
+      </details>
+
+    </section>'
+  )
+)
+```
+
+```{r}
+#| results: asis
+
+# ============================================================
+# CPI DETAILS
+# ============================================================
+
+cat(
+  glue(
+    '<section class="section-card">
+
+      <details>
+
+        <summary>
+
+          <div class="summary-title">
+
+            <div class="icon">
+              C
+            </div>
+
+            <div>
+
+              <h2>
+                CPI details
+              </h2>
+
+              <p>
+                {htmlEscape(metadata$cpi_reference_period)}
+                · annual percentage change by capital city
+              </p>
+
+            </div>
+
+          </div>
+
+          <div class="chevron">
+            ⌄
+          </div>
+
+        </summary>
+
+
+        <div class="detail-body">
+
+          {make_table(
+            cpi,
+            highlight_name = "Perth",
+            highlight_row =
+              which(
+                cpi[[1]] ==
+                  "All groups"
+              ),
+            min_width = 1080
+          )}
+
+        </div>
+
+      </details>
+
+    </section>'
+  )
+)
+```
+
+```{r}
+#| results: asis
+
+# ============================================================
+# DWELLING APPROVALS DETAILS
+# ============================================================
+
+cat(
+  glue(
+    '<section class="section-card">
+
+      <details>
+
+        <summary>
+
+          <div class="summary-title">
+
+            <div class="icon">
+              D
+            </div>
+
+            <div>
+
+              <h2>
+                Dwelling approvals details
+              </h2>
+
+              <p>
+                {htmlEscape(metadata$dwelling_reference_period)}
+                · seasonally adjusted
+              </p>
+
+            </div>
+
+          </div>
+
+          <div class="chevron">
+            ⌄
+          </div>
+
+        </summary>
+
+
+        <div class="detail-body">
+
+          {make_table(
+            dwellings,
+            highlight_row =
+              which(
+                dwellings[[1]] ==
+                  "Western Australia"
+              )
+          )}
+
+        </div>
+
+      </details>
+
+    </section>'
+  )
+)
+```
