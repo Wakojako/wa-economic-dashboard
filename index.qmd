@@ -56,12 +56,54 @@ metadata <- fromJSON(
 
 
 # ============================================================
+# GENERAL HELPERS
+# ============================================================
+
+esc <- function(x) {
+  as.character(
+    htmlEscape(
+      as.character(x)
+    )
+  )
+}
+
+
+first_or <- function(
+  x,
+  default = ""
+) {
+
+  if (
+    length(x) == 0 ||
+    is.null(x) ||
+    is.na(x[[1]])
+  ) {
+    return(default)
+  }
+
+  as.character(x[[1]])
+}
+
+
+html_out <- function(x) {
+  cat(
+    as.character(x),
+    "\n"
+  )
+}
+
+
+# ============================================================
 # SPARKLINES
 # ============================================================
 
 parse_values <- function(x) {
 
-  if (is.na(x) || !nzchar(x)) {
+  if (
+    length(x) == 0 ||
+    is.na(x) ||
+    !nzchar(x)
+  ) {
     return(numeric())
   }
 
@@ -102,6 +144,16 @@ spark_svg <- function(
     na.rm = TRUE
   )
 
+  if (
+    !all(is.finite(rng))
+  ) {
+
+    return(
+      '<span class="no-trend">No trend available</span>'
+    )
+
+  }
+
   y <- if (diff(rng) == 0) {
 
     rep(
@@ -137,33 +189,31 @@ spark_svg <- function(
     tail(y, 1)
   )
 
-  glue(
-    '<svg class="sparkline"
-          viewBox="0 0 {width} {height}"
-          role="img"
-          aria-label="Recent trend">
+  # Keep SVG on ONE line so Quarto/Pandoc does not
+  # accidentally interpret any part as Markdown/code.
 
-      <polyline
-        points="{points}"
-        fill="none"
-        stroke="{colour}"
-        stroke-width="3"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-
-      <circle
-        cx="{last_x}"
-        cy="{last_y}"
-        r="4"
-        fill="white"
-        stroke="{colour}"
-        stroke-width="3"
-      />
-
-    </svg>'
+  paste0(
+    '<svg class="sparkline" ',
+    'viewBox="0 0 ', width, ' ', height, '" ',
+    'role="img" aria-label="Recent trend">',
+    '<polyline ',
+    'points="', points, '" ',
+    'fill="none" ',
+    'stroke="', colour, '" ',
+    'stroke-width="3" ',
+    'stroke-linecap="round" ',
+    'stroke-linejoin="round">',
+    '</polyline>',
+    '<circle ',
+    'cx="', last_x, '" ',
+    'cy="', last_y, '" ',
+    'r="4" ',
+    'fill="white" ',
+    'stroke="', colour, '" ',
+    'stroke-width="3">',
+    '</circle>',
+    '</svg>'
   )
-
 }
 
 
@@ -172,10 +222,12 @@ spark_svg <- function(
 # ============================================================
 
 status_class <- function(x) {
+
   paste0(
     "cell-",
     x
   )
+
 }
 
 
@@ -206,62 +258,73 @@ dashboard_row <- function(
     ""
   }
 
-  glue(
-    '<div class="summary-row{fuel_class}">
 
-      <div class="indicator-cell">
+  trend_html <- spark_svg(
+    parse_values(
+      spark_values
+    ),
+    spark_colour
+  )
 
-        <span class="section-kicker">
-          {htmlEscape(group)}
-        </span>
 
-        <strong>
-          {htmlEscape(indicator)}
-        </strong>
+  paste0(
 
-        <small>
-          {htmlEscape(note)}
-        </small>
+    '<div class="summary-row',
+    fuel_class,
+    '">',
 
-      </div>
+    '<div class="indicator-cell">',
 
-      <div class="trend-cell">
-        {spark_svg(
-          parse_values(spark_values),
-          spark_colour
-        )}
-      </div>
+    '<span class="section-kicker">',
+    esc(group),
+    '</span>',
 
-      <div class="
-        metric-cell
-        latest-cell
-        {status_class(latest_status)}
-      ">
-        {htmlEscape(latest_display)}
-      </div>
+    '<strong>',
+    esc(indicator),
+    '</strong>',
 
-      <div class="
-        metric-cell
-        {status_class(month_status)}
-      ">
-        {htmlEscape(month_display)}
-      </div>
+    '<small>',
+    esc(note),
+    '</small>',
 
-      <div class="
-        metric-cell
-        {status_class(year_status)}
-      ">
-        {htmlEscape(year_display)}
-      </div>
+    '</div>',
 
-      <div class="
-        metric-cell
-        {status_class(base_status)}
-      ">
-        {htmlEscape(base_display)}
-      </div>
 
-    </div>'
+    '<div class="trend-cell">',
+    trend_html,
+    '</div>',
+
+
+    '<div class="metric-cell latest-cell ',
+    status_class(latest_status),
+    '">',
+    esc(latest_display),
+    '</div>',
+
+
+    '<div class="metric-cell ',
+    status_class(month_status),
+    '">',
+    esc(month_display),
+    '</div>',
+
+
+    '<div class="metric-cell ',
+    status_class(year_status),
+    '">',
+    esc(year_display),
+    '</div>',
+
+
+    '<div class="metric-cell ',
+    status_class(base_status),
+    '">',
+    esc(base_display),
+    '</div>',
+
+
+    '</div>'
+
   )
 
 }
@@ -284,122 +347,151 @@ make_table <- function(
   min_width = 980
 ) {
 
+  if (ncol(data) == 0) {
+
+    return(
+      '<p class="section-note">No data available.</p>'
+    )
+
+  }
+
+
   headers <- paste0(
     "<th>",
-    htmlEscape(names(data)),
+    esc(names(data)),
     "</th>",
     collapse = ""
   )
 
-  body <- map_chr(
-    seq_len(nrow(data)),
-    function(i) {
 
-      cells <- map_chr(
-        seq_along(data),
-        function(j) {
+  if (nrow(data) == 0) {
 
-          classes <- character()
+    body <- ""
 
-          if (j == 1) {
+  } else {
 
-            classes <- c(
-              classes,
-              "row-label"
-            )
+    body <- map_chr(
+      seq_len(nrow(data)),
+      function(i) {
 
-          }
+        cells <- map_chr(
+          seq_along(data),
+          function(j) {
 
-          if (
-            !is.null(highlight_name) &&
-            names(data)[j] == highlight_name
-          ) {
+            classes <- character()
 
-            classes <- c(
-              classes,
-              "highlight-column"
-            )
 
-          }
+            if (j == 1) {
 
-          if (
-            !is.null(highlight_row) &&
-            i == highlight_row
-          ) {
+              classes <- c(
+                classes,
+                "row-label"
+              )
 
-            classes <- c(
-              classes,
-              "highlight-row"
-            )
+            }
 
-          }
 
-          cls <- if (length(classes)) {
+            if (
+              !is.null(highlight_name) &&
+              names(data)[j] == highlight_name
+            ) {
+
+              classes <- c(
+                classes,
+                "highlight-column"
+              )
+
+            }
+
+
+            if (
+              length(highlight_row) > 0 &&
+              i %in% highlight_row
+            ) {
+
+              classes <- c(
+                classes,
+                "highlight-row"
+              )
+
+            }
+
+
+            cls <- if (
+              length(classes) > 0
+            ) {
+
+              paste0(
+                ' class="',
+                paste(
+                  classes,
+                  collapse = " "
+                ),
+                '"'
+              )
+
+            } else {
+
+              ""
+
+            }
+
 
             paste0(
-              ' class="',
-              paste(
-                classes,
-                collapse = " "
+              "<td",
+              cls,
+              ">",
+              esc(
+                data[[j]][i]
               ),
-              '"'
+              "</td>"
             )
 
-          } else {
-
-            ""
-
           }
+        )
 
-          glue(
-            '<td{cls}>
-              {htmlEscape(
-                as.character(
-                  data[[j]][i]
-                )
-              )}
-            </td>'
-          )
 
-        }
-      )
-
-      glue(
-        '<tr>
-          {paste(
+        paste0(
+          "<tr>",
+          paste(
             cells,
             collapse = ""
-          )}
-        </tr>'
-      )
+          ),
+          "</tr>"
+        )
 
-    }
-  )
+      }
+    )
 
-  glue(
-    '<div class="table-wrap">
+  }
 
-      <table
-        class="data-table"
-        style="min-width:{min_width}px"
-      >
 
-        <thead>
-          <tr>
-            {headers}
-          </tr>
-        </thead>
+  paste0(
 
-        <tbody>
-          {paste(
-            body,
-            collapse = ""
-          )}
-        </tbody>
+    '<div class="table-wrap">',
 
-      </table>
+    '<table class="data-table" ',
+    'style="min-width:',
+    min_width,
+    'px">',
 
-    </div>'
+    '<thead>',
+    '<tr>',
+    headers,
+    '</tr>',
+    '</thead>',
+
+    '<tbody>',
+    paste(
+      body,
+      collapse = ""
+    ),
+    '</tbody>',
+
+    '</table>',
+
+    '</div>'
+
   )
 
 }
@@ -416,11 +508,14 @@ fuel_rows <- summary_data |>
 
 
 # ============================================================
-# RBA CASH-RATE DECISION TABLE
+# RBA CASH-RATE DECISIONS
 # ============================================================
 
 cash_year <- format(
-  Sys.Date(),
+  as.Date(
+    Sys.time(),
+    tz = "Australia/Perth"
+  ),
   "%Y"
 )
 
@@ -430,8 +525,16 @@ if (nrow(cash_rate_decisions) > 0) {
   cash_tbl <- cash_rate_decisions |>
 
     mutate(
+
       effective_date =
-        as.Date(effective_date)
+        as.Date(effective_date),
+
+      change_ppt =
+        as.numeric(change_ppt),
+
+      cash_rate_target =
+        as.numeric(cash_rate_target)
+
     ) |>
 
     filter(
@@ -503,107 +606,137 @@ if (nrow(cash_rate_decisions) > 0) {
 }
 ```
 
+
 ```{r}
-#| results: asis
+#| output: asis
 
 # ============================================================
 # MAIN DASHBOARD
 # ============================================================
 
-cat(
-  glue(
-    '<div class="dashboard-shell">
+main_dashboard_html <- paste0(
 
-      <div class="dashboard-top">
-
-        <div class="dashboard-title">
-
-          <span class="eyebrow">
-            Economic dashboard
-          </span>
-
-          <h1>
-            WA economic indicators
-          </h1>
-
-          <p class="dashboard-lead">
-            A compact view of Western Australia’s
-            labour market, inflation, monetary policy,
-            residential construction and Perth fuel prices.
-          </p>
-
-        </div>
-
-        <div class="snapshot">
-          Updated {htmlEscape(metadata$updated_at)}
-        </div>
-
-      </div>
+  '<div class="dashboard-shell">',
 
 
-      <section class="card summary-scroll">
+  '<div class="dashboard-top">',
 
-        <div class="summary-header">
+  '<div class="dashboard-title">',
 
-          <div></div>
+  '<span class="eyebrow">',
+  'Economic dashboard',
+  '</span>',
 
-          <div>
-            Recent trend
-            <small>Up to 3 years</small>
-          </div>
+  '<h1>',
+  'WA economic indicators',
+  '</h1>',
 
-          <div>
-            Latest figure
-            <small>Latest available</small>
-          </div>
+  '<p class="dashboard-lead">',
+  'A compact view of Western Australia’s ',
+  'labour market, inflation, monetary policy, ',
+  'residential construction and Perth fuel prices.',
+  '</p>',
 
-          <div>
-            One month change
-            <small>Previous month</small>
-          </div>
-
-          <div>
-            One year change
-            <small>Annual/year-earlier</small>
-          </div>
-
-          <div>
-            Change since COVID-19
-            <small>Where comparable</small>
-          </div>
-
-        </div>
-
-        {paste(
-          rows,
-          collapse = ""
-        )}
-
-      </section>
+  '</div>',
 
 
-      <p class="method-note">
+  '<div class="snapshot">',
+  'Updated ',
+  esc(
+    first_or(
+      metadata$updated_at,
+      "Unknown"
+    )
+  ),
+  '</div>',
 
-        <strong>Cash rate:</strong>
-        Reserve Bank of Australia cash rate target.
+  '</div>',
 
-        <strong>Fuel rows:</strong>
-        only the lowest price shown on the
-        WA Fuel Finder Perth pages is displayed;
-        no trend or change calculations are applied.
 
-        <strong>CPI short-term trend:</strong>
-        {htmlEscape(metadata$cpi_trend_definition)}
+  '<section class="card summary-scroll">',
 
-      </p>
 
-    </div>'
-  )
+  '<div class="summary-header">',
+
+  '<div></div>',
+
+
+  '<div>',
+  'Recent trend',
+  '<small>Up to 3 years</small>',
+  '</div>',
+
+
+  '<div>',
+  'Latest figure',
+  '<small>Latest available</small>',
+  '</div>',
+
+
+  '<div>',
+  'One month change',
+  '<small>Previous month</small>',
+  '</div>',
+
+
+  '<div>',
+  'One year change',
+  '<small>Annual/year-earlier</small>',
+  '</div>',
+
+
+  '<div>',
+  'Change since COVID-19',
+  '<small>Where comparable</small>',
+  '</div>',
+
+
+  '</div>',
+
+
+  paste(
+    rows,
+    collapse = ""
+  ),
+
+
+  '</section>',
+
+
+  '<p class="method-note">',
+
+  '<strong>Cash rate:</strong> ',
+  'Reserve Bank of Australia cash rate target. ',
+
+  '<strong>Fuel rows:</strong> ',
+  'only the lowest price shown on the ',
+  'WA Fuel Finder Perth pages is displayed; ',
+  'no trend or change calculations are applied. ',
+
+  '<strong>CPI short-term trend:</strong> ',
+  esc(
+    first_or(
+      metadata$cpi_trend_definition,
+      ""
+    )
+  ),
+
+  '</p>',
+
+
+  '</div>'
+
+)
+
+
+html_out(
+  main_dashboard_html
 )
 ```
 
+
 ```{r}
-#| results: asis
+#| output: asis
 
 # ============================================================
 # RBA CASH RATE DECISIONS
@@ -620,88 +753,100 @@ cash_table_html <- if (
 
 } else {
 
-  '<p class="section-note">
-     Cash-rate decision history will appear after
-     the RBA data has been successfully refreshed.
-   </p>'
+  paste0(
+    '<p class="section-note">',
+    'Cash-rate decision history will appear ',
+    'after the RBA data has been successfully refreshed.',
+    '</p>'
+  )
 
 }
 
 
-cat(
-  glue(
-    '<section class="section-card">
+rba_html <- paste0(
 
-      <details open>
+  '<section class="section-card">',
 
-        <summary>
+  '<details open>',
 
-          <div class="summary-title">
-
-            <div class="icon">
-              R
-            </div>
-
-            <div>
-
-              <h2>
-                RBA cash rate decisions — {cash_year}
-              </h2>
-
-              <p>
-                Monetary Policy Board decisions
-                and cash rate target
-              </p>
-
-            </div>
-
-          </div>
-
-          <div class="chevron">
-            ⌄
-          </div>
-
-        </summary>
+  '<summary>',
 
 
-        <div class="detail-body">
+  '<div class="summary-title">',
 
-          <div class="detail-toolbar">
+  '<div class="icon">',
+  'R',
+  '</div>',
 
-            <p>
-              Cash-rate decisions for the
-              current calendar year.
-            </p>
+  '<div>',
 
-            <a
-              class="source-button"
-              href="https://www.rba.gov.au/statistics/cash-rate/"
-              target="_blank"
-            >
-              Open RBA
-            </a>
+  '<h2>',
+  'RBA cash rate decisions — ',
+  cash_year,
+  '</h2>',
 
-          </div>
+  '<p>',
+  'Monetary Policy Board decisions and cash rate target',
+  '</p>',
 
-          {cash_table_html}
+  '</div>',
 
-          <p class="section-note">
-            Changes are measured in percentage points.
-            Dates shown are the effective dates
-            published by the Reserve Bank of Australia.
-          </p>
+  '</div>',
 
-        </div>
 
-      </details>
+  '<div class="chevron">',
+  '⌄',
+  '</div>',
 
-    </section>'
-  )
+
+  '</summary>',
+
+
+  '<div class="detail-body">',
+
+
+  '<div class="detail-toolbar">',
+
+  '<p>',
+  'Cash-rate decisions for the current calendar year.',
+  '</p>',
+
+  '<a class="source-button" ',
+  'href="https://www.rba.gov.au/statistics/cash-rate/" ',
+  'target="_blank">',
+  'Open RBA',
+  '</a>',
+
+  '</div>',
+
+
+  cash_table_html,
+
+
+  '<p class="section-note">',
+  'Changes are measured in percentage points. ',
+  'Dates shown are the effective dates published ',
+  'by the Reserve Bank of Australia.',
+  '</p>',
+
+
+  '</div>',
+
+  '</details>',
+
+  '</section>'
+
+)
+
+
+html_out(
+  rba_html
 )
 ```
 
+
 ```{r}
-#| results: asis
+#| output: asis
 
 # ============================================================
 # MONTHLY FUEL
@@ -726,6 +871,27 @@ dsl <- fuel_rows |>
     )
   ) |>
   slice(1)
+
+
+ulp_latest <- first_or(
+  ulp$latest_display,
+  "Unavailable"
+)
+
+ulp_note <- first_or(
+  ulp$note,
+  ""
+)
+
+dsl_latest <- first_or(
+  dsl$latest_display,
+  "Unavailable"
+)
+
+dsl_note <- first_or(
+  dsl$note,
+  ""
+)
 
 
 fuel_tbl <- fuel_monthly |>
@@ -764,307 +930,374 @@ fuel_tbl <- fuel_monthly |>
   )
 
 
-cat(
-  glue(
-    '<section class="section-card">
+fuel_html <- paste0(
 
-      <details open>
+  '<section class="section-card">',
 
-        <summary>
+  '<details open>',
 
-          <div class="summary-title">
-
-            <div class="icon fuel">
-              F
-            </div>
-
-            <div>
-
-              <h2>
-                Monthly average fuel prices
-              </h2>
-
-              <p>
-                FuelWatch Metro averages,
-                cents per litre
-              </p>
-
-            </div>
-
-          </div>
-
-          <div class="chevron">
-            ⌄
-          </div>
-
-        </summary>
+  '<summary>',
 
 
-        <div class="detail-body">
+  '<div class="summary-title">',
 
-          <div class="fuel-grid">
+  '<div class="icon fuel">',
+  'F',
+  '</div>',
 
-            <div class="fuel-card">
+  '<div>',
 
-              <span>
-                Lowest listed ULP — Perth
-              </span>
+  '<h2>',
+  'Monthly average fuel prices',
+  '</h2>',
 
-              <strong>
-                {htmlEscape(ulp$latest_display)}
-              </strong>
+  '<p>',
+  'FuelWatch Metro averages, cents per litre',
+  '</p>',
 
-              <small>
-                {htmlEscape(ulp$note)}
-              </small>
+  '</div>',
 
-            </div>
-
-
-            <div class="fuel-card">
-
-              <span>
-                Lowest listed diesel — Perth
-              </span>
-
-              <strong>
-                {htmlEscape(dsl$latest_display)}
-              </strong>
-
-              <small>
-                {htmlEscape(dsl$note)}
-              </small>
-
-            </div>
-
-          </div>
+  '</div>',
 
 
-          <div class="detail-toolbar">
+  '<div class="chevron">',
+  '⌄',
+  '</div>',
 
-            <p>
-              Monthly averages come from FuelWatch.
-              {htmlEscape(metadata$fuel_monthly_mode)}
-            </p>
 
-            <a
-              class="source-button"
-              href="https://www.fuelwatch.wa.gov.au/retail/monthly"
-              target="_blank"
-            >
-              Open FuelWatch
-            </a>
+  '</summary>',
 
-          </div>
 
-          {make_table(
-            fuel_tbl,
-            min_width = 680
-          )}
+  '<div class="detail-body">',
 
-          <p class="section-note">
-            Blank monthly cells mean that series has
-            not yet been refreshed by the optional
-            monthly connector.
-          </p>
 
-        </div>
+  '<div class="fuel-grid">',
 
-      </details>
 
-    </section>'
-  )
+  '<div class="fuel-card">',
+
+  '<span>',
+  'Lowest listed ULP — Perth',
+  '</span>',
+
+  '<strong>',
+  esc(ulp_latest),
+  '</strong>',
+
+  '<small>',
+  esc(ulp_note),
+  '</small>',
+
+  '</div>',
+
+
+  '<div class="fuel-card">',
+
+  '<span>',
+  'Lowest listed diesel — Perth',
+  '</span>',
+
+  '<strong>',
+  esc(dsl_latest),
+  '</strong>',
+
+  '<small>',
+  esc(dsl_note),
+  '</small>',
+
+  '</div>',
+
+
+  '</div>',
+
+
+  '<div class="detail-toolbar">',
+
+  '<p>',
+  'Monthly averages come from FuelWatch. ',
+  esc(
+    first_or(
+      metadata$fuel_monthly_mode,
+      ""
+    )
+  ),
+  '</p>',
+
+  '<a class="source-button" ',
+  'href="https://www.fuelwatch.wa.gov.au/retail/monthly" ',
+  'target="_blank">',
+  'Open FuelWatch',
+  '</a>',
+
+  '</div>',
+
+
+  make_table(
+    fuel_tbl,
+    min_width = 680
+  ),
+
+
+  '<p class="section-note">',
+  'Blank monthly cells mean that series has ',
+  'not yet been refreshed by the optional ',
+  'monthly connector.',
+  '</p>',
+
+
+  '</div>',
+
+  '</details>',
+
+  '</section>'
+
+)
+
+
+html_out(
+  fuel_html
 )
 ```
 
+
 ```{r}
-#| results: asis
+#| output: asis
 
 # ============================================================
 # LABOUR MARKET DETAILS
 # ============================================================
 
-cat(
-  glue(
-    '<section class="section-card">
-
-      <details>
-
-        <summary>
-
-          <div class="summary-title">
-
-            <div class="icon">
-              L
-            </div>
-
-            <div>
-
-              <h2>
-                Labour market details
-              </h2>
-
-              <p>
-                {htmlEscape(metadata$labour_reference_period)}
-                · seasonally adjusted
-              </p>
-
-            </div>
-
-          </div>
-
-          <div class="chevron">
-            ⌄
-          </div>
-
-        </summary>
+labour_highlight <- which(
+  labour[[1]] ==
+    "Unemployment rate"
+)
 
 
-        <div class="detail-body">
+labour_html <- paste0(
 
-          {make_table(
-            labour,
-            highlight_name = "Western Australia",
-            highlight_row =
-              which(
-                labour[[1]] ==
-                  "Unemployment rate"
-              )
-          )}
+  '<section class="section-card">',
 
-        </div>
+  '<details>',
 
-      </details>
+  '<summary>',
 
-    </section>'
-  )
+
+  '<div class="summary-title">',
+
+  '<div class="icon">',
+  'L',
+  '</div>',
+
+  '<div>',
+
+  '<h2>',
+  'Labour market details',
+  '</h2>',
+
+  '<p>',
+  esc(
+    first_or(
+      metadata$labour_reference_period,
+      ""
+    )
+  ),
+  ' · seasonally adjusted',
+  '</p>',
+
+  '</div>',
+
+  '</div>',
+
+
+  '<div class="chevron">',
+  '⌄',
+  '</div>',
+
+
+  '</summary>',
+
+
+  '<div class="detail-body">',
+
+  make_table(
+    labour,
+    highlight_name = "Western Australia",
+    highlight_row = labour_highlight
+  ),
+
+  '</div>',
+
+
+  '</details>',
+
+  '</section>'
+
+)
+
+
+html_out(
+  labour_html
 )
 ```
 
+
 ```{r}
-#| results: asis
+#| output: asis
 
 # ============================================================
 # CPI DETAILS
 # ============================================================
 
-cat(
-  glue(
-    '<section class="section-card">
-
-      <details>
-
-        <summary>
-
-          <div class="summary-title">
-
-            <div class="icon">
-              C
-            </div>
-
-            <div>
-
-              <h2>
-                CPI details
-              </h2>
-
-              <p>
-                {htmlEscape(metadata$cpi_reference_period)}
-                · annual percentage change by capital city
-              </p>
-
-            </div>
-
-          </div>
-
-          <div class="chevron">
-            ⌄
-          </div>
-
-        </summary>
+cpi_highlight <- which(
+  cpi[[1]] ==
+    "All groups"
+)
 
 
-        <div class="detail-body">
+cpi_html <- paste0(
 
-          {make_table(
-            cpi,
-            highlight_name = "Perth",
-            highlight_row =
-              which(
-                cpi[[1]] ==
-                  "All groups"
-              ),
-            min_width = 1080
-          )}
+  '<section class="section-card">',
 
-        </div>
+  '<details>',
 
-      </details>
+  '<summary>',
 
-    </section>'
-  )
+
+  '<div class="summary-title">',
+
+  '<div class="icon">',
+  'C',
+  '</div>',
+
+  '<div>',
+
+  '<h2>',
+  'CPI details',
+  '</h2>',
+
+  '<p>',
+  esc(
+    first_or(
+      metadata$cpi_reference_period,
+      ""
+    )
+  ),
+  ' · annual percentage change by capital city',
+  '</p>',
+
+  '</div>',
+
+  '</div>',
+
+
+  '<div class="chevron">',
+  '⌄',
+  '</div>',
+
+
+  '</summary>',
+
+
+  '<div class="detail-body">',
+
+  make_table(
+    cpi,
+    highlight_name = "Perth",
+    highlight_row = cpi_highlight,
+    min_width = 1080
+  ),
+
+  '</div>',
+
+
+  '</details>',
+
+  '</section>'
+
+)
+
+
+html_out(
+  cpi_html
 )
 ```
 
+
 ```{r}
-#| results: asis
+#| output: asis
 
 # ============================================================
 # DWELLING APPROVALS DETAILS
 # ============================================================
 
-cat(
-  glue(
-    '<section class="section-card">
-
-      <details>
-
-        <summary>
-
-          <div class="summary-title">
-
-            <div class="icon">
-              D
-            </div>
-
-            <div>
-
-              <h2>
-                Dwelling approvals details
-              </h2>
-
-              <p>
-                {htmlEscape(metadata$dwelling_reference_period)}
-                · seasonally adjusted
-              </p>
-
-            </div>
-
-          </div>
-
-          <div class="chevron">
-            ⌄
-          </div>
-
-        </summary>
+dwelling_highlight <- which(
+  dwellings[[1]] ==
+    "Western Australia"
+)
 
 
-        <div class="detail-body">
+dwelling_html <- paste0(
 
-          {make_table(
-            dwellings,
-            highlight_row =
-              which(
-                dwellings[[1]] ==
-                  "Western Australia"
-              )
-          )}
+  '<section class="section-card">',
 
-        </div>
+  '<details>',
 
-      </details>
+  '<summary>',
 
-    </section>'
-  )
+
+  '<div class="summary-title">',
+
+  '<div class="icon">',
+  'D',
+  '</div>',
+
+  '<div>',
+
+  '<h2>',
+  'Dwelling approvals details',
+  '</h2>',
+
+  '<p>',
+  esc(
+    first_or(
+      metadata$dwelling_reference_period,
+      ""
+    )
+  ),
+  ' · seasonally adjusted',
+  '</p>',
+
+  '</div>',
+
+  '</div>',
+
+
+  '<div class="chevron">',
+  '⌄',
+  '</div>',
+
+
+  '</summary>',
+
+
+  '<div class="detail-body">',
+
+  make_table(
+    dwellings,
+    highlight_row = dwelling_highlight
+  ),
+
+  '</div>',
+
+
+  '</details>',
+
+  '</section>'
+
+)
+
+
+html_out(
+  dwelling_html
 )
 ```
