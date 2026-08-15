@@ -232,17 +232,17 @@ momentum_year_date <-
 momentum_year <- if (
   momentum_year_date %in% cpi_momentum$date
 ) {
-
+  
   latest_momentum$value -
     lookup_value(
       cpi_momentum,
       momentum_year_date
     )
-
+  
 } else {
-
+  
   NA_real_
-
+  
 }
 
 
@@ -284,22 +284,22 @@ message("Downloading RBA cash-rate decisions...")
 
 
 get_rba_cash_rate_decisions <- function(page_url) {
-
+  
   page <- read_html(page_url)
-
+  
   tables <- page |>
     html_elements("table") |>
     html_table(fill = TRUE)
-
-
+  
+  
   # Find the table containing the RBA cash-rate decisions
   cash_tables <- keep(
     tables,
     function(tbl) {
-
+      
       headings <- names(tbl) |>
         str_squish()
-
+      
       has_date <- any(
         str_detect(
           headings,
@@ -309,7 +309,7 @@ get_rba_cash_rate_decisions <- function(page_url) {
           )
         )
       )
-
+      
       has_rate <- any(
         str_detect(
           headings,
@@ -319,25 +319,25 @@ get_rba_cash_rate_decisions <- function(page_url) {
           )
         )
       )
-
+      
       has_date && has_rate
-
+      
     }
   )
-
-
+  
+  
   if (length(cash_tables) == 0) {
-
+    
     stop(
       "Could not locate the RBA cash-rate decision table."
     )
-
+    
   }
-
-
+  
+  
   raw <- cash_tables[[1]]
-
-
+  
+  
   # Clean the column names
   names(raw) <- names(raw) |>
     str_squish() |>
@@ -345,47 +345,47 @@ get_rba_cash_rate_decisions <- function(page_url) {
     str_replace_all("%", " percent ") |>
     str_replace_all("[^a-z0-9]+", "_") |>
     str_replace_all("^_|_$", "")
-
-
+  
+  
   date_col <- names(raw)[
     str_detect(
       names(raw),
       "effective.*date"
     )
   ][1]
-
-
+  
+  
   change_col <- names(raw)[
     str_detect(
       names(raw),
       "change"
     )
   ][1]
-
-
+  
+  
   rate_col <- names(raw)[
     str_detect(
       names(raw),
       "cash.*rate.*target"
     )
   ][1]
-
-
+  
+  
   if (
     is.na(date_col) ||
     is.na(change_col) ||
     is.na(rate_col)
   ) {
-
+    
     stop(
       "RBA cash-rate columns were not recognised."
     )
-
+    
   }
-
-
+  
+  
   out <- tibble(
-
+    
     effective_date =
       as.Date(
         parse_date_time(
@@ -399,68 +399,68 @@ get_rba_cash_rate_decisions <- function(page_url) {
           quiet = TRUE
         )
       ),
-
+    
     change_ppt =
       parse_number(
         as.character(
           raw[[change_col]]
         )
       ),
-
+    
     cash_rate_target =
       parse_number(
         as.character(
           raw[[rate_col]]
         )
       )
-
+    
   ) |>
-
+    
     filter(
       !is.na(effective_date),
       !is.na(cash_rate_target)
     ) |>
-
+    
     mutate(
-
+      
       decision = case_when(
-
+        
         change_ppt > 0 ~ "Increase",
-
+        
         change_ppt < 0 ~ "Decrease",
-
+        
         TRUE ~ "No change"
-
+        
       )
-
+      
     ) |>
-
+    
     select(
       effective_date,
       decision,
       change_ppt,
       cash_rate_target
     ) |>
-
+    
     distinct(
       effective_date,
       .keep_all = TRUE
     ) |>
-
+    
     arrange(
       effective_date
     )
-
-
+  
+  
   if (nrow(out) == 0) {
-
+    
     stop(
       "RBA cash-rate table contained no usable observations."
     )
-
+    
   }
-
-
+  
+  
   out
 }
 
@@ -474,77 +474,77 @@ rba_cache_file <-
 
 
 rba_decisions <- tryCatch(
-
+  
   {
-
+    
     rba_data <-
       get_rba_cash_rate_decisions(
         rba_url
       )
-
+    
     write_csv(
       rba_data,
       rba_cache_file
     )
-
+    
     message(
       "RBA cash-rate data refreshed successfully."
     )
-
+    
     rba_data
-
+    
   },
-
+  
   error = function(e) {
-
+    
     warning(
       "RBA refresh failed: ",
       conditionMessage(e),
       ". Attempting to use cached RBA data."
     )
-
-
+    
+    
     if (
       file.exists(rba_cache_file)
     ) {
-
+      
       cached <- read_csv(
         rba_cache_file,
         show_col_types = FALSE
       ) |>
-
+        
         mutate(
-
+          
           effective_date =
             as.Date(effective_date),
-
+          
           change_ppt =
             as.numeric(change_ppt),
-
+          
           cash_rate_target =
             as.numeric(cash_rate_target)
-
+          
         ) |>
-
+        
         arrange(
           effective_date
         )
-
-
+      
+      
       message(
         "Using cached RBA cash-rate data."
       )
-
+      
       cached
-
+      
     } else {
-
+      
       NULL
-
+      
     }
-
+    
   }
-
+  
 )
 
 
@@ -552,14 +552,14 @@ if (
   is.null(rba_decisions) ||
   nrow(rba_decisions) == 0
 ) {
-
+  
   stop(
     paste0(
       "RBA cash-rate data could not be downloaded ",
       "and no cached file is available."
     )
   )
-
+  
 }
 
 
@@ -582,37 +582,37 @@ today_perth <- as.Date(
 # ============================================================
 
 rba_rate_on <- function(
-  decisions,
-  target_date
+    decisions,
+    target_date
 ) {
-
+  
   target_date <- as.Date(
     target_date
   )
-
-
+  
+  
   available <- decisions |>
-
+    
     filter(
       effective_date <= target_date
     ) |>
-
+    
     arrange(
       desc(effective_date)
     )
-
-
+  
+  
   if (nrow(available) == 0) {
-
+    
     return(
       NA_real_
     )
-
+    
   }
-
-
+  
+  
   available$cash_rate_target[[1]]
-
+  
 }
 
 
@@ -621,24 +621,24 @@ rba_rate_on <- function(
 # ============================================================
 
 latest_rba_decision <- rba_decisions |>
-
+  
   filter(
     effective_date <= today_perth
   ) |>
-
+  
   arrange(
     desc(effective_date)
   ) |>
-
+  
   slice(1)
 
 
 if (nrow(latest_rba_decision) == 0) {
-
+  
   stop(
     "No current RBA cash-rate decision was found."
   )
-
+  
 }
 
 
@@ -693,36 +693,36 @@ cash_covid_change <-
 # ============================================================
 
 cash_month_starts <- seq.Date(
-
+  
   from =
     floor_date(
       today_perth,
       "month"
     ) %m-% months(35),
-
+  
   to =
     floor_date(
       today_perth,
       "month"
     ),
-
+  
   by = "month"
-
+  
 )
 
 
 cash_spark_values <- vapply(
-
+  
   seq_along(
     cash_month_starts
   ),
-
+  
   function(i) {
-
+    
     month_start <-
       cash_month_starts[i]
-
-
+    
+    
     month_end <-
       as.Date(
         ceiling_date(
@@ -731,23 +731,23 @@ cash_spark_values <- vapply(
         ) -
           days(1)
       )
-
-
+    
+    
     comparison_date <- min(
       month_end,
       today_perth
     )
-
-
+    
+    
     rba_rate_on(
       rba_decisions,
       comparison_date
     )
-
+    
   },
-
+  
   numeric(1)
-
+  
 )
 
 
@@ -760,43 +760,43 @@ cash_spark_values <- vapply(
 # calculated for that series.
 
 base_summary <- tibble(
-
+  
   indicator = c(
-
+    
     "WA unemployment rate",
-
+    
     "Perth headline CPI",
-
+    
     "Australia underlying CPI",
-
+    
     "Australia CPI short-term trend",
-
+    
     "RBA cash rate target",
-
+    
     "WA dwelling approvals"
-
+    
   ),
-
-
+  
+  
   group = c(
-
+    
     "Labour market",
-
+    
     "Prices",
-
+    
     "Prices",
-
+    
     "Prices",
-
+    
     "Monetary policy",
-
+    
     "Housing"
-
+    
   ),
-
-
+  
+  
   latest_display = c(
-
+    
     paste0(
       round(
         latest_unemp$value,
@@ -804,7 +804,7 @@ base_summary <- tibble(
       ),
       "%"
     ),
-
+    
     paste0(
       round(
         latest_perth_cpi$value,
@@ -812,7 +812,7 @@ base_summary <- tibble(
       ),
       "%"
     ),
-
+    
     paste0(
       round(
         latest_trimmed$value,
@@ -820,7 +820,7 @@ base_summary <- tibble(
       ),
       "%"
     ),
-
+    
     paste0(
       round(
         latest_momentum$value,
@@ -828,7 +828,7 @@ base_summary <- tibble(
       ),
       "%"
     ),
-
+    
     paste0(
       format(
         round(
@@ -840,7 +840,7 @@ base_summary <- tibble(
       ),
       "%"
     ),
-
+    
     format(
       round(
         latest_dwelling$value
@@ -848,228 +848,228 @@ base_summary <- tibble(
       big.mark = ",",
       scientific = FALSE
     )
-
+    
   ),
-
-
+  
+  
   month_display = c(
-
+    
     signed_number(
       unemp_month,
       1,
       " ppt"
     ),
-
+    
     signed_number(
       latest_perth_month$value,
       1,
       "%"
     ),
-
+    
     signed_number(
       latest_trimmed_month$value,
       1,
       "%"
     ),
-
+    
     signed_number(
       momentum_month,
       1,
       " ppt"
     ),
-
+    
     signed_number(
       cash_month_change,
       2,
       " ppt"
     ),
-
+    
     signed_number(
       dwelling_month,
       1,
       "%"
     )
-
+    
   ),
-
-
+  
+  
   year_display = c(
-
+    
     signed_number(
       unemp_year,
       1,
       " ppt"
     ),
-
+    
     signed_number(
       latest_perth_cpi$value,
       1,
       "%"
     ),
-
+    
     signed_number(
       latest_trimmed$value,
       1,
       "%"
     ),
-
+    
     signed_number(
       momentum_year,
       1,
       " ppt"
     ),
-
+    
     signed_number(
       cash_year_change,
       2,
       " ppt"
     ),
-
+    
     signed_number(
       dwelling_year,
       1,
       "%"
     )
-
+    
   ),
-
-
+  
+  
   base_display = c(
-
+    
     signed_number(
       unemp_covid,
       1,
       " ppt"
     ),
-
+    
     "n/a",
-
+    
     "n/a",
-
+    
     "n/a",
-
+    
     signed_number(
       cash_covid_change,
       2,
       " ppt"
     ),
-
+    
     signed_number(
       dwelling_covid,
       1,
       "%"
     )
-
+    
   ),
-
-
+  
+  
   latest_status = c(
-
+    
     "bad",
-
+    
     inflation_level_status(
       latest_perth_cpi$value
     ),
-
+    
     inflation_level_status(
       latest_trimmed$value
     ),
-
+    
     inflation_level_status(
       latest_momentum$value
     ),
-
+    
     "neutral",
-
+    
     "good"
-
+    
   ),
-
-
+  
+  
   month_status = c(
-
+    
     change_status(
       unemp_month,
       TRUE
     ),
-
+    
     change_status(
       latest_perth_month$value,
       TRUE
     ),
-
+    
     change_status(
       latest_trimmed_month$value,
       TRUE
     ),
-
+    
     change_status(
       momentum_month,
       TRUE
     ),
-
+    
     "neutral",
-
+    
     change_status(
       dwelling_month
     )
-
+    
   ),
-
-
+  
+  
   year_status = c(
-
+    
     change_status(
       unemp_year,
       TRUE
     ),
-
+    
     inflation_level_status(
       latest_perth_cpi$value
     ),
-
+    
     inflation_level_status(
       latest_trimmed$value
     ),
-
+    
     change_status(
       momentum_year,
       TRUE
     ),
-
+    
     "neutral",
-
+    
     change_status(
       dwelling_year
     )
-
+    
   ),
-
-
+  
+  
   base_status = c(
-
+    
     change_status(
       unemp_covid,
       TRUE
     ),
-
+    
     "neutral",
-
+    
     "neutral",
-
+    
     "neutral",
-
+    
     "neutral",
-
+    
     change_status(
       dwelling_covid
     )
-
+    
   ),
-
-
+  
+  
   spark_values = c(
-
+    
     paste(
       tail(
         unemployment$value,
@@ -1077,7 +1077,7 @@ base_summary <- tibble(
       ),
       collapse = "|"
     ),
-
+    
     paste(
       tail(
         perth_cpi_annual$value,
@@ -1085,7 +1085,7 @@ base_summary <- tibble(
       ),
       collapse = "|"
     ),
-
+    
     paste(
       tail(
         trimmed_mean_annual$value,
@@ -1093,7 +1093,7 @@ base_summary <- tibble(
       ),
       collapse = "|"
     ),
-
+    
     paste(
       tail(
         cpi_momentum$value,
@@ -1101,12 +1101,12 @@ base_summary <- tibble(
       ),
       collapse = "|"
     ),
-
+    
     paste(
       cash_spark_values,
       collapse = "|"
     ),
-
+    
     paste(
       tail(
         dwellings$value,
@@ -1114,29 +1114,29 @@ base_summary <- tibble(
       ),
       collapse = "|"
     )
-
+    
   ),
-
-
+  
+  
   spark_colour = c(
-
+    
     "#0759a6",
-
+    
     "#7dbb19",
-
+    
     "#5c43a5",
-
+    
     "#bf4b7a",
-
+    
     "#28666e",
-
+    
     "#d88600"
-
+    
   ),
-
-
+  
+  
   note = c(
-
+    
     paste0(
       "Seasonally adjusted · ",
       format(
@@ -1144,7 +1144,7 @@ base_summary <- tibble(
         "%B %Y"
       )
     ),
-
+    
     paste0(
       "Perth All Groups, annual inflation · ",
       format(
@@ -1152,7 +1152,7 @@ base_summary <- tibble(
         "%B %Y"
       )
     ),
-
+    
     paste0(
       "Trimmed mean, Australia · ",
       format(
@@ -1160,7 +1160,7 @@ base_summary <- tibble(
         "%B %Y"
       )
     ),
-
+    
     paste0(
       "6-month annualised, seasonally adjusted · ",
       format(
@@ -1168,7 +1168,7 @@ base_summary <- tibble(
         "%B %Y"
       )
     ),
-
+    
     paste0(
       "RBA cash rate target · effective ",
       format(
@@ -1176,7 +1176,7 @@ base_summary <- tibble(
         "%d %B %Y"
       )
     ),
-
+    
     paste0(
       "Seasonally adjusted · ",
       format(
@@ -1184,12 +1184,12 @@ base_summary <- tibble(
         "%B %Y"
       )
     )
-
+    
   ),
-
-
+  
+  
   fuel_row = FALSE
-
+  
 )
 
 
@@ -1198,23 +1198,23 @@ base_summary <- tibble(
 # ============================================================
 
 fuel_daily <- tryCatch(
-
+  
   bind_rows(
-
+    
     get_lowest_fuel_price(
       "ulp",
       "Perth"
     ),
-
+    
     get_lowest_fuel_price(
       "diesel",
       "Perth"
     )
-
+    
   ),
-
+  
   error = function(e) {
-
+    
     warning(
       paste0(
         "Daily fuel refresh failed; ",
@@ -1222,11 +1222,11 @@ fuel_daily <- tryCatch(
         conditionMessage(e)
       )
     )
-
+    
     NULL
-
+    
   }
-
+  
 )
 
 
@@ -1234,23 +1234,23 @@ if (
   !is.null(fuel_daily) &&
   nrow(fuel_daily) == 2
 ) {
-
+  
   fuel_rows <- fuel_daily |>
-
+    
     mutate(
-
+      
       indicator = ifelse(
-
+        
         fuel == "ULP",
-
+        
         "Lowest listed ULP price — Perth",
-
+        
         "Lowest listed diesel price — Perth"
-
+        
       ),
-
+      
       group = "Fuel",
-
+      
       latest_display = paste0(
         format(
           lowest_price_cpl,
@@ -1258,35 +1258,35 @@ if (
         ),
         " cpl"
       ),
-
+      
       month_display = "—",
-
+      
       year_display = "—",
-
+      
       base_display = "—",
-
+      
       latest_status = "neutral",
-
+      
       month_status = "empty",
-
+      
       year_status = "empty",
-
+      
       base_status = "empty",
-
+      
       spark_values = "",
-
+      
       spark_colour = ifelse(
         fuel == "ULP",
         "#b85c00",
         "#40566f"
       ),
-
+      
       note = paste0(
-
+        
         "WA Fuel Finder · ",
-
+        
         effective,
-
+        
         ifelse(
           nzchar(station),
           paste0(
@@ -1295,98 +1295,98 @@ if (
           ),
           ""
         )
-
+        
       ),
-
+      
       fuel_row = TRUE
-
+      
     ) |>
-
+    
     select(
       names(base_summary)
     )
-
-
+  
+  
 } else {
-
-
+  
+  
   old <- if (
     file.exists(
       "data/dashboard_summary.csv"
     )
   ) {
-
+    
     read_csv(
       "data/dashboard_summary.csv",
       show_col_types = FALSE
     )
-
+    
   } else {
-
+    
     tibble()
-
+    
   }
-
-
+  
+  
   fuel_rows <- old |>
-
+    
     filter(
       group == "Fuel"
     ) |>
-
+    
     select(
       any_of(
         names(base_summary)
       )
     )
-
-
+  
+  
   if (nrow(fuel_rows) == 0) {
-
+    
     fuel_rows <- tibble(
-
+      
       indicator = c(
-
+        
         "Lowest listed ULP price — Perth",
-
+        
         "Lowest listed diesel price — Perth"
-
+        
       ),
-
+      
       group = "Fuel",
-
+      
       latest_display = "Unavailable",
-
+      
       month_display = "—",
-
+      
       year_display = "—",
-
+      
       base_display = "—",
-
+      
       latest_status = "neutral",
-
+      
       month_status = "empty",
-
+      
       year_status = "empty",
-
+      
       base_status = "empty",
-
+      
       spark_values = "",
-
+      
       spark_colour = c(
         "#b85c00",
         "#40566f"
       ),
-
+      
       note =
         "Daily price refresh unavailable",
-
+      
       fuel_row = TRUE
-
+      
     )
-
+    
   }
-
+  
 }
 
 
@@ -1429,11 +1429,11 @@ update_fuelwatch_monthly(
 # ============================================================
 
 safe_table_update(
-
+  
   labour_url,
-
+  
   function(x) {
-
+    
     any(
       str_detect(
         names(x),
@@ -1442,52 +1442,52 @@ safe_table_update(
         )
       )
     ) &&
-
+      
       any(
         as.character(
           x[[1]]
         ) ==
           "Unemployment rate"
       )
-
+    
   },
-
+  
   "data/labour_market.csv"
-
+  
 )
 
 
 safe_table_update(
-
+  
   cpi_url,
-
+  
   function(x) {
-
+    
     any(
       names(x) ==
         "Perth"
     ) &&
-
+      
       any(
         as.character(
           x[[1]]
         ) ==
           "All groups"
       )
-
+    
   },
-
+  
   "data/cpi_capital_cities.csv"
-
+  
 )
 
 
 safe_table_update(
-
+  
   dwelling_url,
-
+  
   function(x) {
-
+    
     any(
       str_detect(
         names(x),
@@ -1496,18 +1496,18 @@ safe_table_update(
         )
       )
     ) &&
-
+      
       any(
         as.character(
           x[[1]]
         ) ==
           "Western Australia"
       )
-
+    
   },
-
+  
   "data/dwelling_approvals.csv"
-
+  
 )
 
 
@@ -1516,7 +1516,7 @@ safe_table_update(
 # ============================================================
 
 metadata <- list(
-
+  
   # Always display dashboard refresh time in Perth
   updated_at = format(
     with_tz(
@@ -1525,55 +1525,55 @@ metadata <- list(
     ),
     "%Y-%m-%d %H:%M:%S %Z"
   ),
-
-
+  
+  
   labour_reference_period =
     format(
       latest_unemp$date,
       "%B %Y"
     ),
-
-
+  
+  
   cpi_reference_period =
     format(
       latest_perth_cpi$date,
       "%B %Y"
     ),
-
-
+  
+  
   dwelling_reference_period =
     format(
       latest_dwelling$date,
       "%B %Y"
     ),
-
-
+  
+  
   rba_reference_period =
     format(
       latest_cash_date,
       "%d %B %Y"
     ),
-
-
+  
+  
   daily_fuel_reference_period =
     if (
       !is.null(fuel_daily)
     ) {
-
+      
       paste(
         unique(
           fuel_daily$effective
         ),
         collapse = " / "
       )
-
+      
     } else {
-
+      
       "cached"
-
+      
     },
-
-
+  
+  
   fuel_monthly_mode =
     if (
       nzchar(
@@ -1582,68 +1582,68 @@ metadata <- list(
         )
       )
     ) {
-
+      
       "automated FuelWatch-backed connector"
-
+      
     } else {
-
+      
       paste0(
         "cached monthly values ",
         "(PARSE_API_KEY not configured)"
       )
-
+      
     },
-
-
+  
+  
   cpi_trend_definition =
     paste0(
       "Six-month annualised change in the ",
       "seasonally adjusted Australian All Groups ",
       "CPI index. Dashboard calculation."
     ),
-
-
+  
+  
   sources = list(
-
+    
     labour =
       labour_url,
-
+    
     cpi =
       cpi_url,
-
+    
     dwelling =
       dwelling_url,
-
+    
     cash_rate =
       rba_url,
-
+    
     ulp =
       "https://wafuelfinder.com/ulp/Perth/today",
-
+    
     diesel =
       "https://wafuelfinder.com/diesel/Perth/today",
-
+    
     fuelwatch_monthly =
       paste0(
         "https://www.fuelwatch.wa.gov.au/",
         "retail/monthly"
       )
-
+    
   )
-
+  
 )
 
 
 write_json(
-
+  
   metadata,
-
+  
   "data/metadata.json",
-
+  
   pretty = TRUE,
-
+  
   auto_unbox = TRUE
-
+  
 )
 
 
@@ -1661,63 +1661,63 @@ summary_check <- read_csv(
 
 
 if (nrow(summary_check) != 8) {
-
+  
   stop(
     paste0(
       "Expected 8 summary rows; found ",
       nrow(summary_check)
     )
   )
-
+  
 }
 
 
 required <- c(
-
+  
   "WA unemployment rate",
-
+  
   "Perth headline CPI",
-
+  
   "Australia underlying CPI",
-
+  
   "Australia CPI short-term trend",
-
+  
   "RBA cash rate target",
-
+  
   "WA dwelling approvals",
-
+  
   "Lowest listed ULP price — Perth",
-
+  
   "Lowest listed diesel price — Perth"
-
+  
 )
 
 
 if (
   !all(
     required %in%
-      summary_check$indicator
+    summary_check$indicator
   )
 ) {
-
+  
   stop(
     "One or more required dashboard rows are missing."
   )
-
+  
 }
 
 
 parse_latest <- function(label) {
-
+  
   readr::parse_number(
-
+    
     summary_check$latest_display[
       summary_check$indicator ==
         label
     ]
-
+    
   )
-
+  
 }
 
 
@@ -1730,11 +1730,11 @@ if (
     20
   )
 ) {
-
+  
   stop(
     "Unemployment rate failed range check."
   )
-
+  
 }
 
 
@@ -1747,11 +1747,11 @@ if (
     20
   )
 ) {
-
+  
   stop(
     "Perth CPI failed range check."
   )
-
+  
 }
 
 
@@ -1764,11 +1764,11 @@ if (
     20
   )
 ) {
-
+  
   stop(
     "Underlying CPI failed range check."
   )
-
+  
 }
 
 
@@ -1781,11 +1781,11 @@ if (
     20
   )
 ) {
-
+  
   stop(
     "RBA cash rate failed range check."
   )
-
+  
 }
 
 
@@ -1798,11 +1798,11 @@ if (
     20000
   )
 ) {
-
+  
   stop(
     "Dwelling approvals failed range check."
   )
-
+  
 }
 
 
@@ -1812,11 +1812,11 @@ for (
     "Lowest listed diesel price — Perth"
   )
 ) {
-
+  
   x <- parse_latest(
     label
   )
-
+  
   if (
     !is.na(x) &&
     !dplyr::between(
@@ -1825,14 +1825,14 @@ for (
       600
     )
   ) {
-
+    
     stop(
       label,
       " failed range check."
     )
-
+    
   }
-
+  
 }
 
 
